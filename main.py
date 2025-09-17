@@ -46,20 +46,18 @@ Valve, boolian, indicator of valve conditions;0 is measurement; 10 is zeroing; 1
 """
 
 import pandas as pd
+import folium
 import numpy as np
-import os
 
 def main():
     print("RUNNING")
 
     file_name = "USOS-ARL-Suite_ARC_20240716_RA.ict"
-    arc_data = arc_data_dataframe(".venv/ARC/USOS-ARL-Suite_ARC_20240716_RA.ict")
+    arc_data = arc_data_dataframe("ARC/USOS-ARL-Suite_ARC_20240716_RA.ict")
 
-    print(arc_data.to_string())
+    print(arc_data.head())
 
-import pandas as pd
-import numpy as np
-import os
+    arc_path(arc_data)
 
 def arc_data_dataframe(filepath):
     """
@@ -81,19 +79,37 @@ def arc_data_dataframe(filepath):
         filepath,
         skiprows=header_line_index,  # skip metadata before header
         header=0,                    # use this line as column names
-        na_values=-99999.0           # treat -99999.0 as NaN
+        na_values=-99999.0,          # treat -99999.0 as NaN
+        skipinitialspace=True
     )
 
     df = df.replace(-9999.0, np.nan)
 
     # Drop rows where lat and long data is NaN
     df = df.dropna(subset=[df.columns[1], df.columns[2]])
+
     return df
 
-def arc_path(dataset):
+def arc_path(df):
 
-    return 0
+    #Retrieve lat and lon data cols
+    lat_col = df.columns[1]
+    lon_col = df.columns[2]
 
+    #Transform to tuples for folium
+    coords = list(zip(df['lat_DGPS_deg'], df['lon_DGPS_deg']))
+
+    print(coords)
+
+    # Center map on mean location
+    m = folium.Map(location=[df[lat_col].mean(), df[lon_col].mean()], zoom_start=12)
+
+    # Add the car's path as a blue polyline
+    folium.PolyLine(coords, color="blue", weight=3, opacity=0.7).add_to(m)
+
+    # Save map to HTML file
+    m.save("slc_car_path.html")
+    print("Map saved as slc_car_path.html")
 
 
 if __name__ == "__main__":
