@@ -1,6 +1,8 @@
 """
 USOS 2024 ARC Platform Data Geospatial Mapping
 
+Author: Harrison LeTourneau
+
 An interactive geospatial mapping of NOAA's 2024 USOS Study of Salt Lake City's GHG Pollutants
 
 DATA FIELDS:
@@ -47,17 +49,48 @@ Valve, boolian, indicator of valve conditions;0 is measurement; 10 is zeroing; 1
 
 import pandas as pd
 import folium
+import branca.colormap as cm
 import numpy as np
+import icartt
+from branca.colormap import LinearColormap
+
 
 def main():
     print("RUNNING")
 
-    file_name = "USOS-ARL-Suite_ARC_20240716_RA.ict"
-    arc_data = arc_data_dataframe("ARC/USOS-ARL-Suite_ARC_20240716_RA.ict")
+    # 718 is very large
+    file_name = "ARC/USOS-ARL-Suite_ARC_20240718_RA.ict"
 
-    print(arc_data.head())
+    # Pandas dataframe
+    arc_data = arc_data_dataframe(file_name)
 
-    arc_path(arc_data)
+    # ICARTT dataset
+    arc_data2 = arc_data_icartt(file_name)
+
+    # ARC map with car path
+    m = arc_map(arc_data)
+
+    print("Created Mapping")
+
+    # Add Layers
+    add_layer(m, arc_data, 'CH4_aeris313_ppm')
+    add_layer(m, arc_data, 'H2O_aeris313_ppm')
+    add_layer(m, arc_data, 'CO2_g2401m_ppm')
+
+    # Add layer control
+    folium.LayerControl().add_to(m)
+
+    # Save to html
+    m.save('slc_car_path.html')
+
+
+
+def arc_data_icartt(filepath):
+    """Reads an ICARTT ARC file using python ICARTT package"""
+
+    ict_dataset = icartt.Dataset(filepath)
+
+    return ict_dataset
 
 def arc_data_dataframe(filepath):
     """
@@ -83,34 +116,85 @@ def arc_data_dataframe(filepath):
         skipinitialspace=True
     )
 
-    df = df.replace(-9999.0, np.nan)
-
     # Drop rows where lat and long data is NaN
     df = df.dropna(subset=[df.columns[1], df.columns[2]])
 
     return df
 
-def arc_path(df):
+def arc_map(ds):
 
     #Retrieve lat and lon data cols
-    lat_col = df.columns[1]
-    lon_col = df.columns[2]
+    lat_col = ds['lat_DGPS_deg']
+    lon_col = ds['lon_DGPS_deg']
 
     #Transform to tuples for folium
-    coords = list(zip(df['lat_DGPS_deg'], df['lon_DGPS_deg']))
-
-    print(coords)
+    coords = list(zip(lat_col, lon_col))
 
     # Center map on mean location
-    m = folium.Map(location=[df[lat_col].mean(), df[lon_col].mean()], zoom_start=12)
+    m = folium.Map(location=[lat_col.mean(), lon_col.mean()], zoom_start=12, prefer_canvas=True)
 
     # Add the car's path as a blue polyline
     folium.PolyLine(coords, color="blue", weight=3, opacity=0.7).add_to(m)
 
-    # Save map to HTML file
-    m.save("slc_car_path.html")
-    print("Map saved as slc_car_path.html")
+    return m
 
+def add_layer(map_obj, df, column):
+    """Adds a layer with circle markers."""
+    if column not in df.columns:
+        return
+
+    layer = folium.FeatureGroup(name=column, control=True, show=False)
+
+    # Get robust min/max
+    rob_min = df[column].quantile(0.01)
+    rob_max = df[column].quantile(0.99)
+
+    # Color map
+    linear = cm.linear.magma.scale(rob_min, rob_max)
+    linear.caption = column
+
+    # Retrieve lat and lon data cols
+    lat_col = df['lat_DGPS_deg']
+    lon_col = df['lon_DGPS_deg']
+
+    # Transform to tuples for folium
+    coords = list(zip(lat_col, lon_col))
+
+    print("Adding ", column, " layer")
+
+    # Use Color line for faster rendering
+    folium.ColorLine(
+        name=column,
+        positions=coords,
+        colors=df[column],
+        colormap=linear,
+        weight=14,
+        opacity=0.9
+    ).add_to(layer)
+
+
+    # Use circle markers for popups with exact location value
+
+    # for _, row in df.iterrows():
+    #     value = row[column]
+    #
+    #     if pd.notna(value):
+    #         folium.Circle(
+    #             location=(row["lat_DGPS_deg"], row["lon_DGPS_deg"]),
+    #             radius=50,
+    #             # color=linear(value),
+    #             show=False,
+    #             fill=True,
+    #             fill_opacity=0.9,
+    #             stroke=False,
+    #             popup=folium.Popup(f"{column}: {value:.1f} @ {row['StartTime_seconds']}")  # ADD in UTC time for current row
+    #         ).add_to(layer)
+
+
+    # Add colormap key
+    map_obj.add_child(linear)
+
+    layer.add_to(map_obj)
 
 if __name__ == "__main__":
     main()
