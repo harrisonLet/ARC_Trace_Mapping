@@ -5,4 +5,4 @@ The Wasatch Front region, home to over 2.5 million people, regularly experiences
 Standards (NAAQS) for ozone. This project uses mobile laboratory data collected via the ARC (Air Resources Car) vehicle to map the spatial
 distribution of greenhouse gases (GHGs) and other pollutants.
 
-Check 'folium' directory for interactive mapping of daily ARC data in .html leaflet files.
+Check 'arc_mapping' directory for interactive mapping of daily ARC data in .html leaflet files or download the zip of all mappings from 'downloads'.
