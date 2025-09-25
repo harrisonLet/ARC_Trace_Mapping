@@ -3,7 +3,8 @@ USOS 2024 ARC Platform Data Geospatial Mapping
 
 Author: Harrison LeTourneau
 
-An interactive geospatial mapping of NOAA's 2024 USOS Study of Salt Lake City's GHG Pollutants
+Creates an interactive geospatial mapping of NOAA's 2024 USOS Study of Salt Lake City's GHG Pollutants
+utilizing pandas and folium extending leaflet.
 
 ARC DATA FIELDS:
 
@@ -47,50 +48,56 @@ PM10, ug/m3, PM10 by particle sensor
 Valve, boolian, indicator of valve conditions;0 is measurement; 10 is zeroing; 11 is spanning
 
 * many are naan -9999
+
+
 """
 
 import pandas as pd
 import folium
 import branca.colormap as cm
-import numpy as np
-from tqdm import tqdm
 
 
 def main():
 
-    # 718 730
-    file_name = "ARC/USOS-ARL-Suite_ARC_20240801_RA.ict"
+    arc_dates = [
+                 20240728, 20240729, 20240730, 20240731, 20240801,
+                 20240802, 20240803, 20240804]
 
-    print("Generating ARC mapping for: " + file_name)
+    for arcdate in arc_dates:
+        file_name = f"ARC/USOS-ARL-Suite_ARC_{arcdate}_RA.ict"
 
-    # Pandas dataframe
-    arc_data = arc_data_dataframe(file_name)
+        # Pandas dataframe
+        arc_data = arc_data_dataframe(file_name)
 
-    # ARC map with car path
-    m = arc_map(arc_data, file_name)
+        print(f"Generated folium mapping for: {arcdate}")
 
-    # Add Layers
-    add_layer(m, arc_data, 'CH4_aeris313_ppm')
-    add_layer(m, arc_data, 'H2O_aeris313_ppm')
-    add_layer(m, arc_data, 'CO2_g2401m_ppm')
-    add_layer(m, arc_data, 'alt_msl_m')
+        # ARC map with car path
+        m = arc_map(arc_data, file_name)
 
-    add_layer(m, arc_data, 'C2H6_aeris313_ppb')
-    add_layer(m, arc_data, 'C2C1_aeris313')
-    add_layer(m, arc_data, 'delta13C_CH4_raw')
+        # Add Layers
+        add_layer(m, arc_data, 'CH4_aeris313_ppm')
+        add_layer(m, arc_data, 'H2O_aeris313_ppm')
+        add_layer(m, arc_data, 'CO2_g2401m_ppm')
+        add_layer(m, arc_data, 'alt_msl_m')
 
-    # Add Vector map
-    add_vector_map(m, arc_data, 'true_WS_m_s')
+        add_layer(m, arc_data, 'C2H6_aeris313_ppb')
+        add_layer(m, arc_data, 'C2C1_aeris313')
+        add_layer(m, arc_data, 'delta13C_CH4_raw')
 
-    # Add layer control
-    folium.LayerControl().add_to(m)
+        # Add Vector map
+        add_vector_map(m, arc_data, 'true_WS_m_s')
 
-    print("Generating html file...")
+        # Add layer control
+        folium.LayerControl().add_to(m)
 
-    # Save to html
-    m.save('folium/slc_car_path.html')
+        print("Generating html file...")
 
-    print('Successfully saved file.')
+        filesave = f"folium/arc_data_mapping_{arcdate}.html"
+
+        # Save to html
+        m.save(filesave)
+
+        print(f'Successfully saved file: {filesave}')
 
 
 def arc_data_dataframe(filepath):
@@ -108,7 +115,7 @@ def arc_data_dataframe(filepath):
                 header_line_index = i
                 break
 
-    print("Creating dataframe...")
+    # print("Creating dataframe...")
     # Read the file with pandas
     df = pd.read_csv(
         filepath,
@@ -124,9 +131,13 @@ def arc_data_dataframe(filepath):
     return df
 
 def arc_map(ds, filename):
+    """
+    Creates a folium map from a Pandas DataFrame.
+    Adds satellite, topo, street map.
+    """
 
-    print("Generating map...")
-    m = folium.Map()
+    print(f'Reading {filename}...')
+
     #Retrieve lat and lon data cols
     lat_col = ds['lat_DGPS_deg']
     lon_col = ds['lon_DGPS_deg']
@@ -160,11 +171,14 @@ def arc_map(ds, filename):
     return m
 
 def add_layer(map_obj, df, column):
-    """Adds a layer with circle markers."""
+    """
+    Adds a colormapped layer with circle markers (detailed analysis) or colorline (smaller html generation).
+    """
     if column not in df.columns:
         return
 
-    print("Adding layer {}...".format(column))
+    print(f"Adding layer {column}...")
+
     layer = folium.FeatureGroup(name=column, control=True, show=False)
 
     # Get robust min/max
@@ -216,6 +230,10 @@ def add_layer(map_obj, df, column):
     layer.add_to(map_obj)
 
 def add_vector_map(map_obj, df, column):
+    """
+    Adds a vector layer with ascii arrow markers, color mapped to strength oriented to direction
+        * used for wind mapping.
+    """
 
     layer = folium.FeatureGroup(name=column, control=True, show=False)
 
@@ -234,10 +252,10 @@ def add_vector_map(map_obj, df, column):
     # Transform to tuples for folium
     coords = list(zip(lat_col, lon_col))
 
-    print("Adding ", column, " vector map...")
+    print(f"Adding {column} vector map...")
 
 
-    for idx, row in tqdm(df.iloc[::25].iterrows(), total=len(df[::25]), bar_format='{bar}', colour='white'):
+    for idx, row in df.iloc[::25].iterrows():
         lat = row['lat_DGPS_deg']
         lon = row['lon_DGPS_deg']
         ws = row['true_WS_m_s']
@@ -271,4 +289,6 @@ def add_vector_map(map_obj, df, column):
 if __name__ == "__main__":
     main()
 
+
+# add gaussian plume equation, source identification and location
 
