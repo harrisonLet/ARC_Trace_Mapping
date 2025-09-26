@@ -49,7 +49,6 @@ Valve, boolian, indicator of valve conditions;0 is measurement; 10 is zeroing; 1
 
 * many are naan -9999
 
-
 """
 
 import pandas as pd
@@ -59,12 +58,12 @@ import branca.colormap as cm
 
 def main():
 
-    arc_dates = [
-                 20240728, 20240729, 20240730, 20240731, 20240801,
+    arc_dates = [20240716, 20240717, 20240718, 20240719, 20240721, 20240722, 20240723,
+                 20240725, 20240726, 20240727, 20240728, 20240729, 20240730, 20240731,
                  20240802, 20240803, 20240804]
 
     for arcdate in arc_dates:
-        file_name = f"ARC/USOS-ARL-Suite_ARC_{arcdate}_RA.ict"
+        file_name = f"arc_raw/USOS-ARL-Suite_ARC_{arcdate}_RA.ict"
 
         # Pandas dataframe
         arc_data = arc_data_dataframe(file_name)
@@ -90,14 +89,44 @@ def main():
         # Add layer control
         folium.LayerControl().add_to(m)
 
+        # Add title
+        header_html = f"""
+        <div style="
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 9999;
+            text-align: center;
+        ">
+            <img src="https://csl.noaa.gov/groups/csl7/measurements/2024usos/images/logos/usos_logo.png"
+                 alt="USOS Logo"
+                 width="110px"
+                 style="display:block; margin-bottom:5px;">
+
+            <div style="
+                font-size: 19px;
+                font-weight: bold;
+                background-color: rgba(176, 216, 235);
+                padding: 4px 8px;
+                border-radius: 4px;
+         ">
+                <span style="color:#da8322;">{arcdate}</span> 
+            </div>
+        </div>
+        """
+
+        # Add the HTML to the map
+        m.get_root().html.add_child(folium.Element(header_html))
+
         print("Generating html file...")
 
-        filesave = f"folium/arc_data_mapping_{arcdate}.html"
+        filesave = f"arc_mapping/arc_data_mapping_{arcdate}.html"
 
         # Save to html
         m.save(filesave)
 
         print(f'Successfully saved file: {filesave}')
+        print('\n\n')
 
 
 def arc_data_dataframe(filepath):
@@ -146,7 +175,8 @@ def arc_map(ds, filename):
     coords = list(zip(lat_col, lon_col))
 
     # Center map on mean location
-    m = folium.Map(location=[lat_col.mean(), lon_col.mean()], zoom_start=12, prefer_canvas=True, tiles=False)
+    m = folium.Map(location=[lat_col.mean(), lon_col.mean()], zoom_start=12, prefer_canvas=True,
+                   tiles=False, zoom_control=False)
 
     # Street, topo, satellite
     folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -156,8 +186,8 @@ def arc_map(ds, filename):
                     overlay=False
                      ).add_to(m)
 
-    folium.TileLayer('https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}{r}.png',
-                     attr='&copy; CNES, Distribution Airbus DS, © Airbus DS, © PlanetObserver (Contains Copernicus Data) | &copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                     attr='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
                      name='Satellite',
                      control=True,
                      overlay=False
@@ -174,24 +204,34 @@ def add_layer(map_obj, df, column):
     """
     Adds a colormapped layer with circle markers (detailed analysis) or colorline (smaller html generation).
     """
-    if column not in df.columns:
+
+    if df[column].isna().all():
         return
 
     print(f"Adding layer {column}...")
 
     layer = folium.FeatureGroup(name=column, control=True, show=False)
 
+    # Clean dataframe for Nan
+    clean_df = df.copy()
+    # Drop rows where column has NaN
+    clean_df = clean_df[clean_df[column].notna()]
+
     # Get robust min/max
-    rob_min = df[column].quantile(0.01)
-    rob_max = df[column].quantile(0.99)
+    rob_min = clean_df[column].quantile(0.01)
+    rob_max = clean_df[column].quantile(0.99)
+
+    rob_min, rob_max = sorted([rob_min, rob_max])
+
+    print(rob_min, rob_max)
 
     # Color map
     linear = cm.linear.inferno.scale(rob_min, rob_max)
     linear.caption = column
 
     # Retrieve lat and lon data cols
-    lat_col = df['lat_DGPS_deg']
-    lon_col = df['lon_DGPS_deg']
+    lat_col = clean_df['lat_DGPS_deg']
+    lon_col = clean_df['lon_DGPS_deg']
 
     # Transform to tuples for folium
     coords = list(zip(lat_col, lon_col))
@@ -200,7 +240,7 @@ def add_layer(map_obj, df, column):
     folium.ColorLine(
         name=column,
         positions=coords,
-        colors=df[column].astype(float),
+        colors=clean_df[column].astype(float),
         colormap=linear,
         weight=14,
         opacity=0.8
